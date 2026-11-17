@@ -1,0 +1,291 @@
+"use client";
+
+import React, { useState } from "react";
+import {
+  ShieldAlert,
+  ShieldCheck,
+  AlertTriangle,
+  AlertOctagon,
+  Network,
+  CheckCircle2,
+  HelpCircle,
+  Copy,
+  Check,
+  Building,
+  Briefcase,
+  Share2,
+} from "lucide-react";
+import { InvestigationResponse, RiskLevel } from "@/types";
+
+interface ReportCardProps {
+  data: InvestigationResponse;
+  selectedLanguage: "en" | "te";
+}
+
+export const ReportCard: React.FC<ReportCardProps> = ({ data, selectedLanguage }) => {
+  const { report, scam_connections, domain_analysis, student_protection, extracted_entities } =
+    data;
+  const [copiedQuestionIndex, setCopiedQuestionIndex] = useState<number | null>(null);
+
+  const riskBadgeStyles: Record<
+    RiskLevel,
+    { badgeBg: string; text: string; border: string; barGradient: string }
+  > = {
+    HIGH: {
+      badgeBg: "bg-red-950/80",
+      text: "text-red-400",
+      border: "border-red-600/80",
+      barGradient: "from-amber-500 via-red-500 to-rose-600",
+    },
+    MEDIUM: {
+      badgeBg: "bg-amber-950/80",
+      text: "text-amber-400",
+      border: "border-amber-600/80",
+      barGradient: "from-yellow-400 via-amber-500 to-orange-500",
+    },
+    LOW: {
+      badgeBg: "bg-emerald-950/80",
+      text: "text-emerald-400",
+      border: "border-emerald-600/80",
+      barGradient: "from-teal-400 to-emerald-500",
+    },
+  };
+
+  const style = riskBadgeStyles[report.risk_level] || riskBadgeStyles.LOW;
+
+  const handleCopyQuestion = (question: string, index: number) => {
+    navigator.clipboard.writeText(question);
+    setCopiedQuestionIndex(index);
+    setTimeout(() => setCopiedQuestionIndex(null), 2000);
+  };
+
+  const preventiveActions =
+    selectedLanguage === "te" && report.preventive_actions_te?.length
+      ? report.preventive_actions_te
+      : report.preventive_actions_en;
+
+  const summary =
+    selectedLanguage === "te" && report.summary_te ? report.summary_te : report.summary_en;
+
+  return (
+    <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">
+      {/* Top Banner: Opportunity Header & Risk Score */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-800">
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span
+              className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border ${style.badgeBg} ${style.text} ${style.border}`}
+            >
+              {report.risk_level} RISK OPPORTUNITY
+            </span>
+            <span className="text-xs text-slate-400">Report #{data.report_id}</span>
+          </div>
+
+          <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+            {report.company_name ? (
+              <>
+                <Building className="w-5 h-5 text-cyan-400" />
+                <span>{report.company_name}</span>
+              </>
+            ) : (
+              <span>Unverified Employer / Organization</span>
+            )}
+          </h3>
+
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400 mt-1">
+            <Briefcase className="w-4 h-4 text-slate-500" />
+            <span>Category: {report.opportunity_type}</span>
+          </div>
+        </div>
+
+        {/* Score Radial / Progress Meter */}
+        <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl min-w-[220px]">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Risk Score
+            </span>
+            <span className={`text-2xl font-black ${style.text}`}>
+              {report.risk_score}
+              <span className="text-xs font-normal text-slate-500">/100</span>
+            </span>
+          </div>
+          <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+            <div
+              className={`h-full bg-gradient-to-r ${style.barGradient} transition-all duration-1000 ease-out`}
+              style={{ width: `${Math.min(100, Math.max(5, report.risk_score))}%` }}
+            />
+          </div>
+          <p className="text-[10px] text-slate-500 mt-2 text-right">
+            {report.risk_score >= 75
+              ? "Critical fraud probability"
+              : report.risk_score >= 40
+              ? "Moderate suspicion detected"
+              : "Standard indicators"}
+          </p>
+        </div>
+      </div>
+
+      {/* Coordinated Scam Connection Network Alert */}
+      {(scam_connections.is_coordinated_campaign ||
+        scam_connections.matched_entities.length > 0) && (
+        <div className="p-4 sm:p-5 rounded-xl bg-red-950/50 border border-red-700/80 text-red-200">
+          <div className="flex items-start gap-3">
+            <Network className="w-6 h-6 text-red-400 shrink-0 mt-0.5" />
+            <div className="space-y-2">
+              <h4 className="text-sm font-bold text-red-300 uppercase tracking-wide">
+                Coordinated Scam Network Detected
+              </h4>
+              <p className="text-xs sm:text-sm text-red-200/90 leading-relaxed">
+                One or more identifiers in this offer match verified past fraud reports recorded in
+                the ScamShield intelligence database.
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {scam_connections.matched_entities.map((entity, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono bg-red-900/60 border border-red-700 text-red-100"
+                  >
+                    <span className="uppercase text-[10px] font-bold text-red-300">
+                      {entity.entity_type}:
+                    </span>
+                    <span>{entity.entity_value}</span>
+                    <span className="bg-red-800 px-1 rounded text-[10px] text-white">
+                      {entity.previous_reports} reports
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Summary Section */}
+      <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-5">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+          <span>
+            {selectedLanguage === "te" ? "Tenglish Summary" : "Investigation Summary"}
+          </span>
+          <span className="text-[10px] font-medium text-cyan-400 uppercase">
+            {selectedLanguage === "te" ? "Tenglish" : "English"}
+          </span>
+        </h4>
+        <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-line">{summary}</p>
+      </div>
+
+      {/* Two Column Section: Red Flags & Student Protection Alerts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Red Flags */}
+        <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-5 space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            Detected Red Flags ({report.red_flags.length})
+          </h4>
+          <ul className="space-y-2">
+            {report.red_flags.map((flag, i) => (
+              <li
+                key={i}
+                className="text-xs sm:text-sm text-slate-300 flex items-start gap-2.5 bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/60"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-2 shrink-0" />
+                <span>{flag}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Student Protection Alerts */}
+        <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-5 space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-red-400 flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-red-400" />
+            Student Protection Alerts ({report.student_protection_alerts.length})
+          </h4>
+          {report.student_protection_alerts.length > 0 ? (
+            <ul className="space-y-2">
+              {report.student_protection_alerts.map((alert, i) => (
+                <li
+                  key={i}
+                  className="text-xs sm:text-sm text-red-200 flex items-start gap-2.5 bg-red-950/30 p-2.5 rounded-lg border border-red-900/40"
+                >
+                  <AlertOctagon className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <span>{alert}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs sm:text-sm text-emerald-400 flex items-center gap-2 bg-emerald-950/20 p-3 rounded-lg border border-emerald-900/40">
+              <CheckCircle2 className="w-4 h-4" />
+              No upfront payment or sensitive PII harvesting patterns detected.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Preventive Actions */}
+      <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-5 space-y-3">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-cyan-400" />
+          {selectedLanguage === "te"
+            ? "Recommended Defensive Actions (Tenglish)"
+            : "Recommended Defensive Actions"}
+        </h4>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {preventiveActions.map((action, i) => (
+            <div
+              key={i}
+              className="text-xs sm:text-sm text-slate-300 flex items-start gap-2.5 bg-slate-900/60 p-3 rounded-lg border border-slate-800/60"
+            >
+              <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+              <span>{action}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Recruiter Verification Questions */}
+      {report.verification_questions && report.verification_questions.length > 0 && (
+        <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-2">
+              <HelpCircle className="w-4 h-4 text-blue-400" />
+              Ask the Recruiter (Verification Questions)
+            </h4>
+            <span className="text-[10px] text-slate-500">Copy & send to test recruiter validity</span>
+          </div>
+
+          <div className="space-y-2">
+            {report.verification_questions.map((question, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-3 rounded-lg text-xs sm:text-sm text-slate-300"
+              >
+                <div className="flex items-start gap-2.5">
+                  <span className="font-bold text-blue-400 text-xs mt-0.5">Q{i + 1}.</span>
+                  <span>{question}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyQuestion(question, i)}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-colors shrink-0"
+                  title="Copy question"
+                >
+                  {copiedQuestionIndex === i ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-emerald-400 text-[11px]">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="text-[11px]">Copy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
