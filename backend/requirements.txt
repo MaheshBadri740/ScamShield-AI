@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+google-genai
+pydantic
+pydantic-settings
+python-multipart
+sqlalchemy
+psycopg2-binary
+slowapi
+tldextract
+python-dotenv
+pillow
