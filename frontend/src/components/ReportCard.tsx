@@ -13,7 +13,6 @@ import {
   Check,
   Building,
   Briefcase,
-  Share2,
 } from "lucide-react";
 import { InvestigationResponse, RiskLevel } from "@/types";
 
@@ -29,25 +28,25 @@ export const ReportCard: React.FC<ReportCardProps> = ({ data, selectedLanguage }
 
   const riskBadgeStyles: Record<
     RiskLevel,
-    { badgeBg: string; text: string; border: string; barGradient: string }
+    { badgeBg: string; text: string; border: string; barColor: string }
   > = {
     HIGH: {
-      badgeBg: "bg-red-950/80",
-      text: "text-red-400",
-      border: "border-red-600/80",
-      barGradient: "from-amber-500 via-red-500 to-rose-600",
+      badgeBg: "bg-red-950/70",
+      text: "text-red-300",
+      border: "border-red-800/80",
+      barColor: "bg-red-500",
     },
     MEDIUM: {
-      badgeBg: "bg-amber-950/80",
-      text: "text-amber-400",
-      border: "border-amber-600/80",
-      barGradient: "from-yellow-400 via-amber-500 to-orange-500",
+      badgeBg: "bg-amber-950/70",
+      text: "text-amber-300",
+      border: "border-amber-800/80",
+      barColor: "bg-amber-500",
     },
     LOW: {
-      badgeBg: "bg-emerald-950/80",
-      text: "text-emerald-400",
-      border: "border-emerald-600/80",
-      barGradient: "from-teal-400 to-emerald-500",
+      badgeBg: "bg-emerald-950/70",
+      text: "text-emerald-300",
+      border: "border-emerald-800/80",
+      barColor: "bg-emerald-500",
     },
   };
 
@@ -68,23 +67,23 @@ export const ReportCard: React.FC<ReportCardProps> = ({ data, selectedLanguage }
     selectedLanguage === "te" && report.summary_te ? report.summary_te : report.summary_en;
 
   return (
-    <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 shadow-sm space-y-6 animate-fadeIn">
       {/* Top Banner: Opportunity Header & Risk Score */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span
-              className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border ${style.badgeBg} ${style.text} ${style.border}`}
+              className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider border ${style.badgeBg} ${style.text} ${style.border}`}
             >
-              {report.risk_level} RISK OPPORTUNITY
+              {report.risk_level} Risk Opportunity
             </span>
-            <span className="text-xs text-slate-400">Report #{data.report_id}</span>
+            <span className="text-[11px] text-slate-500">Report #{data.report_id}</span>
           </div>
 
-          <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+          <h3 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
             {report.company_name ? (
               <>
-                <Building className="w-5 h-5 text-cyan-400" />
+                <Building className="w-4 h-4 text-indigo-400 shrink-0" />
                 <span>{report.company_name}</span>
               </>
             ) : (
@@ -92,35 +91,35 @@ export const ReportCard: React.FC<ReportCardProps> = ({ data, selectedLanguage }
             )}
           </h3>
 
-          <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400 mt-1">
-            <Briefcase className="w-4 h-4 text-slate-500" />
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-1">
+            <Briefcase className="w-3.5 h-3.5 text-slate-500" />
             <span>Category: {report.opportunity_type}</span>
           </div>
         </div>
 
-        {/* Score Radial / Progress Meter */}
-        <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl min-w-[220px]">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+        {/* Score Progress Meter */}
+        <div className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl min-w-[200px]">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
               Risk Score
             </span>
-            <span className={`text-2xl font-black ${style.text}`}>
+            <span className={`text-xl font-bold ${style.text}`}>
               {report.risk_score}
               <span className="text-xs font-normal text-slate-500">/100</span>
             </span>
           </div>
-          <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+          <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800/80">
             <div
-              className={`h-full bg-gradient-to-r ${style.barGradient} transition-all duration-1000 ease-out`}
+              className={`h-full ${style.barColor} transition-all duration-700 ease-out`}
               style={{ width: `${Math.min(100, Math.max(5, report.risk_score))}%` }}
             />
           </div>
-          <p className="text-[10px] text-slate-500 mt-2 text-right">
+          <p className="text-[10px] text-slate-400 mt-1.5 text-right font-medium">
             {report.risk_score >= 75
-              ? "Critical fraud probability"
+              ? "High fraud probability"
               : report.risk_score >= 40
               ? "Moderate suspicion detected"
-              : "Standard indicators"}
+              : "Standard safe indicators"}
           </p>
         </div>
       </div>
@@ -128,28 +127,27 @@ export const ReportCard: React.FC<ReportCardProps> = ({ data, selectedLanguage }
       {/* Coordinated Scam Connection Network Alert */}
       {(scam_connections.is_coordinated_campaign ||
         scam_connections.matched_entities.length > 0) && (
-        <div className="p-4 sm:p-5 rounded-xl bg-red-950/50 border border-red-700/80 text-red-200">
+        <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/60 text-red-200">
           <div className="flex items-start gap-3">
-            <Network className="w-6 h-6 text-red-400 shrink-0 mt-0.5" />
-            <div className="space-y-2">
-              <h4 className="text-sm font-bold text-red-300 uppercase tracking-wide">
-                Coordinated Scam Network Detected
+            <Network className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+            <div className="space-y-1.5">
+              <h4 className="text-xs sm:text-sm font-bold text-red-300 uppercase tracking-wide">
+                Coordinated Scam Pattern Detected
               </h4>
-              <p className="text-xs sm:text-sm text-red-200/90 leading-relaxed">
-                One or more identifiers in this offer match verified past fraud reports recorded in
-                the ScamShield intelligence database.
+              <p className="text-xs text-red-200/90 leading-relaxed">
+                One or more contact identifiers in this opportunity match previously flagged fraud reports in our database.
               </p>
-              <div className="flex flex-wrap gap-2 pt-1">
+              <div className="flex flex-wrap gap-1.5 pt-1">
                 {scam_connections.matched_entities.map((entity, i) => (
                   <span
                     key={i}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono bg-red-900/60 border border-red-700 text-red-100"
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono bg-red-900/40 border border-red-800 text-red-200"
                   >
-                    <span className="uppercase text-[10px] font-bold text-red-300">
+                    <span className="uppercase text-[10px] font-semibold text-red-300">
                       {entity.entity_type}:
                     </span>
                     <span>{entity.entity_value}</span>
-                    <span className="bg-red-800 px-1 rounded text-[10px] text-white">
+                    <span className="bg-red-950 px-1 rounded text-[10px] text-red-300 border border-red-800/60 font-sans">
                       {entity.previous_reports} reports
                     </span>
                   </span>
@@ -161,23 +159,23 @@ export const ReportCard: React.FC<ReportCardProps> = ({ data, selectedLanguage }
       )}
 
       {/* Summary Section */}
-      <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-5">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+      <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 sm:p-5">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
           <span>
             {selectedLanguage === "te" ? "Tenglish Summary" : "Investigation Summary"}
           </span>
-          <span className="text-[10px] font-medium text-cyan-400 uppercase">
+          <span className="text-[10px] font-medium text-indigo-400 uppercase">
             {selectedLanguage === "te" ? "Tenglish" : "English"}
           </span>
         </h4>
-        <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-line">{summary}</p>
+        <p className="text-xs sm:text-sm text-slate-200 leading-relaxed whitespace-pre-line">{summary}</p>
       </div>
 
       {/* Two Column Section: Red Flags & Student Protection Alerts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Red Flags */}
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-5 space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2">
+        <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
             <AlertTriangle className="w-4 h-4 text-amber-400" />
             Detected Red Flags ({report.red_flags.length})
           </h4>
@@ -185,9 +183,9 @@ export const ReportCard: React.FC<ReportCardProps> = ({ data, selectedLanguage }
             {report.red_flags.map((flag, i) => (
               <li
                 key={i}
-                className="text-xs sm:text-sm text-slate-300 flex items-start gap-2.5 bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/60"
+                className="text-xs text-slate-300 flex items-start gap-2.5 bg-slate-900/90 p-2.5 rounded-lg border border-slate-800/80"
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-2 shrink-0" />
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
                 <span>{flag}</span>
               </li>
             ))}
@@ -195,8 +193,8 @@ export const ReportCard: React.FC<ReportCardProps> = ({ data, selectedLanguage }
         </div>
 
         {/* Student Protection Alerts */}
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-5 space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-red-400 flex items-center gap-2">
+        <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-red-400 flex items-center gap-1.5">
             <ShieldAlert className="w-4 h-4 text-red-400" />
             Student Protection Alerts ({report.student_protection_alerts.length})
           </h4>
@@ -205,37 +203,37 @@ export const ReportCard: React.FC<ReportCardProps> = ({ data, selectedLanguage }
               {report.student_protection_alerts.map((alert, i) => (
                 <li
                   key={i}
-                  className="text-xs sm:text-sm text-red-200 flex items-start gap-2.5 bg-red-950/30 p-2.5 rounded-lg border border-red-900/40"
+                  className="text-xs text-red-200 flex items-start gap-2 bg-red-950/30 p-2.5 rounded-lg border border-red-900/40"
                 >
-                  <AlertOctagon className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <AlertOctagon className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
                   <span>{alert}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-xs sm:text-sm text-emerald-400 flex items-center gap-2 bg-emerald-950/20 p-3 rounded-lg border border-emerald-900/40">
-              <CheckCircle2 className="w-4 h-4" />
-              No upfront payment or sensitive PII harvesting patterns detected.
+            <p className="text-xs text-emerald-300 flex items-center gap-2 bg-emerald-950/20 p-2.5 rounded-lg border border-emerald-900/40 font-medium">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              No upfront payment or sensitive personal data demands detected.
             </p>
           )}
         </div>
       </div>
 
       {/* Preventive Actions */}
-      <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-5 space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-cyan-400" />
+      <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-3">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+          <ShieldCheck className="w-4 h-4 text-indigo-400" />
           {selectedLanguage === "te"
-            ? "Recommended Defensive Actions (Tenglish)"
-            : "Recommended Defensive Actions"}
+            ? "Recommended Safety Steps (Tenglish)"
+            : "Recommended Safety Steps"}
         </h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {preventiveActions.map((action, i) => (
             <div
               key={i}
-              className="text-xs sm:text-sm text-slate-300 flex items-start gap-2.5 bg-slate-900/60 p-3 rounded-lg border border-slate-800/60"
+              className="text-xs text-slate-300 flex items-start gap-2 bg-slate-900/90 p-2.5 rounded-lg border border-slate-800/80"
             >
-              <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
               <span>{action}</span>
             </div>
           ))}
@@ -244,29 +242,29 @@ export const ReportCard: React.FC<ReportCardProps> = ({ data, selectedLanguage }
 
       {/* Recruiter Verification Questions */}
       {report.verification_questions && report.verification_questions.length > 0 && (
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-5 space-y-3">
+        <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-2">
-              <HelpCircle className="w-4 h-4 text-blue-400" />
-              Ask the Recruiter (Verification Questions)
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+              <HelpCircle className="w-4 h-4 text-indigo-400" />
+              Recruiter Verification Questions
             </h4>
-            <span className="text-[10px] text-slate-500">Copy & send to test recruiter validity</span>
+            <span className="text-[11px] text-slate-500">Copy & send to test recruiter validity</span>
           </div>
 
           <div className="space-y-2">
             {report.verification_questions.map((question, i) => (
               <div
                 key={i}
-                className="flex items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-3 rounded-lg text-xs sm:text-sm text-slate-300"
+                className="flex items-center justify-between gap-3 bg-slate-900/90 border border-slate-800/80 p-2.5 rounded-lg text-xs text-slate-200"
               >
-                <div className="flex items-start gap-2.5">
-                  <span className="font-bold text-blue-400 text-xs mt-0.5">Q{i + 1}.</span>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold text-indigo-400 text-xs">Q{i + 1}.</span>
                   <span>{question}</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => handleCopyQuestion(question, i)}
-                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-colors shrink-0"
+                  className="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-colors shrink-0"
                   title="Copy question"
                 >
                   {copiedQuestionIndex === i ? (

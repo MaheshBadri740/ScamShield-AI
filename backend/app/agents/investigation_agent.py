@@ -10,7 +10,9 @@ from app.services.verification_service import (
     analyze_domain_and_email,
     check_student_protection_risks,
     mask_pii,
+    FREE_EMAIL_PROVIDERS,
 )
+import tldextract
 from app.services.scam_connection_service import find_scam_connections
 
 # Optional google-genai import
@@ -120,13 +122,19 @@ class GeminiQuotaExhaustedError(Exception):
 
 
 def _get_genai_client() -> Optional[Any]:
-    """Instantiate and return google-genai Client if configured."""
+    """Instantiate and return google-genai Client with 25s timeout if configured."""
     if not GENAI_AVAILABLE or not settings.GEMINI_API_KEY:
         return None
     # If the user still has placeholder text, treat as unconfigured
     if "your_gemini_api_key" in settings.GEMINI_API_KEY.lower():
         return None
     try:
+        http_options = None
+        if hasattr(types, "HttpOptions"):
+            http_options = types.HttpOptions(timeout=25000)
+
+        if http_options is not None:
+            return genai.Client(api_key=settings.GEMINI_API_KEY, http_options=http_options)
         return genai.Client(api_key=settings.GEMINI_API_KEY)
     except Exception as e:
         print(f"[ScamShield AI Gemini Error]: {e}")
@@ -207,22 +215,30 @@ def _generate_content_with_failover(
             err_msg = str(e)
             print(f"[ScamShield AI Gemini Error] [{model_name}]: {e}")
 
-            # Check for 429 quota, 503 overload, or 404 model not found
+            # Check for 429 quota, 503 overload, 504 deadline, 500 server error, or 404 model not found
+            err_lower = err_msg.lower()
             is_quota_issue = (
                 "429" in err_msg
-                or "resource_exhausted" in err_msg.lower()
-                or "quota" in err_msg.lower()
-                or "rate limit" in err_msg.lower()
+                or "resource_exhausted" in err_lower
+                or "quota" in err_lower
+                or "rate limit" in err_lower
             )
             if not is_quota_issue:
                 all_quota_failures = False
 
             is_failover_status = (
                 is_quota_issue
+                or "504" in err_msg
+                or "deadline_exceeded" in err_lower
+                or "deadline exceeded" in err_lower
+                or "timed out" in err_lower
+                or "timeout" in err_lower
+                or "500" in err_msg
+                or "internal" in err_lower
                 or "503" in err_msg
+                or "unavailable" in err_lower
                 or "404" in err_msg
-                or "unavailable" in err_msg.lower()
-                or "not found" in err_msg.lower()
+                or "not found" in err_lower
             )
 
             if is_failover_status and idx < len(models) - 1:
@@ -314,6 +330,126 @@ def _infer_opportunity_type(text: str, default: Optional[str] = None) -> str:
     return "Job"
 
 
+GENERIC_DOMAINS = {
+    "gmail", "yahoo", "outlook", "hotmail", "proton", "protonmail", "yopmail", "mailinator",
+    "telegram", "t", "whatsapp", "wa", "google", "drive", "docs", "bit", "bitly", "tinyurl",
+    "shorturl", "linkedin", "github", "gitlab", "facebook", "instagram", "twitter", "x",
+    "youtube", "example", "test", "domain",
+}
+
+PREPOSITION_BLACKLIST = {
+    "home", "office", "work", "us", "me", "you", "them", "him", "her", "it",
+    "today", "tomorrow", "yesterday", "monday", "tuesday", "wednesday", "thursday",
+    "friday", "saturday", "sunday", "january", "february", "march", "april", "may",
+    "june", "july", "august", "september", "october", "november", "december",
+    "paying", "sending", "depositing", "clicking", "visiting", "applying",
+    "least", "most", "all", "any", "this", "that", "these", "those",
+    "first", "second", "third", "end", "beginning", "start",
+    "candidate", "students", "graduates", "hr", "team",
+}
+
+
+def _clean_company_name(name: str) -> str:
+    cleaned = name.strip(" \t\r\n,;:-*\"'`_")
+    if cleaned.endswith(".") and not (cleaned.endswith("Ltd.") or cleaned.endswith("Inc.") or cleaned.endswith("Pvt.")):
+        cleaned = cleaned[:-1].strip()
+    return cleaned
+
+
+def extract_company_name(
+    text: Optional[str] = "",
+    emails: Optional[List[str]] = None,
+    domains: Optional[List[str]] = None,
+) -> Optional[str]:
+    """
+    Extracts company/organization/employer name in priority order:
+    1) Explicit labels: Company|Organization|Employer|Program|From|Issued by\s*[:\-]\s*([^\n\r]+)
+    2) Corporate suffixes anywhere in text: capitalized multi-word names ending in
+       Pvt\.?\s*Ltd\.?|Private Limited|Ltd\.?|Inc\.?|LLC|Technologies|Solutions|Systems|Labs|Corporation|Corp|Infotech|Agency
+    3) Preposition phrases anywhere in text: (?:at|from|with|by)\s+([A-Z][A-Za-z0-9&\.\-]+(?:\s+[A-Z][A-Za-z0-9&\.\-]+){0,3})
+    4) Non-free corporate email / website domain fallback (e.g. careers.freshworks.com or zoho.com -> 'Freshworks' / 'Zoho')
+    """
+    if not text and not emails and not domains:
+        return None
+    raw_text = text or ""
+
+    # 1. Explicit labels
+    m1 = re.search(
+        r"(?:company|organization|employer|program|from|issued\s+by)\s*[:\-]\s*([^\n\r]+)",
+        raw_text,
+        re.I,
+    )
+    if m1:
+        extracted = _clean_company_name(m1.group(1))
+        if extracted and not (extracted.startswith("http") or "@" in extracted):
+            return extracted
+
+    # 2. Corporate suffixes anywhere in text
+    m2 = re.search(
+        r"\b([A-Z][A-Za-z0-9&.\-]+(?:\s+[A-Z][A-Za-z0-9&.\-]+)*\s+(?:Pvt\.?\s*Ltd\.?|Private Limited|Ltd\.?|Inc\.?|LLC|Technologies|Solutions|Systems|Labs|Corporation|Corp|Infotech|Agency))(?!\w)",
+        raw_text,
+    )
+    if m2:
+        extracted = _clean_company_name(m2.group(1))
+        if extracted:
+            return extracted
+
+    # 3. Preposition phrases anywhere in text
+    for m3 in re.finditer(
+        r"\b(?:at|from|with|by)\s+([A-Z][A-Za-z0-9&.\-]+(?:\s+[A-Z][A-Za-z0-9&.\-]+){0,3})\b",
+        raw_text,
+    ):
+        cand = _clean_company_name(m3.group(1))
+        words = cand.split()
+        if (
+            words
+            and words[0].lower() not in PREPOSITION_BLACKLIST
+            and cand.lower() not in PREPOSITION_BLACKLIST
+        ):
+            return cand
+
+    # 4. Non-free corporate email / website domain fallback
+    candidate_domains: List[str] = []
+    if emails:
+        for em in emails:
+            if em and "@" in em:
+                candidate_domains.append(em.split("@")[-1].strip().lower())
+    if domains:
+        for dom in domains:
+            if dom:
+                candidate_domains.append(dom.strip().lower())
+
+    # Fallback to regex entity extraction if emails/domains not provided
+    if not candidate_domains and raw_text:
+        text_emails = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", raw_text)
+        for em in text_emails:
+            candidate_domains.append(em.split("@")[-1].strip().lower())
+        text_domains = re.findall(
+            r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|(?:\b[a-zA-Z0-9-]+\.(?:com|org|net|in|co|xyz|top|info|site|tech)\b)",
+            raw_text,
+        )
+        for dom in text_domains:
+            candidate_domains.append(dom.strip().lower())
+
+    for raw_domain in candidate_domains:
+        if raw_domain in FREE_EMAIL_PROVIDERS:
+            continue
+        ext = tldextract.extract(raw_domain)
+        d_name = ext.domain
+        if (
+            d_name
+            and len(d_name) > 1
+            and d_name.lower() not in GENERIC_DOMAINS
+            and f"{d_name}.{ext.suffix}".lower() not in FREE_EMAIL_PROVIDERS
+        ):
+            return d_name.capitalize()
+
+    return None
+
+
+_extract_company_name_fallback = extract_company_name
+
+
 def _build_deterministic_report(
     opportunity_type: str,
     company_name: Optional[str],
@@ -322,8 +458,13 @@ def _build_deterministic_report(
     step_b_protection: Dict[str, Any],
     step_b_connections: Dict[str, Any],
     is_quota_fallback: bool = False,
+    text: Optional[str] = None,
+    emails: Optional[List[str]] = None,
+    domains: Optional[List[str]] = None,
 ) -> BilingualInvestigationReport:
     """Deterministic report generator used when Gemini is unconfigured or encounters an error."""
+    if not company_name and text:
+        company_name = extract_company_name(text, emails=emails, domains=domains)
     has_critical = step_b_protection.get("has_critical_risk", False)
     is_coordinated = step_b_connections.get("is_coordinated_campaign", False)
     has_suspicious_domain = step_b_domain.get("has_suspicious_domain", False)
@@ -462,12 +603,13 @@ def _generate_report_single_call(
 
     return _build_deterministic_report(
         opportunity_type=opportunity_type,
-        company_name=None,
+        company_name=_extract_company_name_fallback(raw_text),
         deterministic_red_flags=deterministic_red_flags,
         step_b_domain=step_b_domain,
         step_b_protection=step_b_protection,
         step_b_connections=step_b_connections,
         is_quota_fallback=is_quota_fallback,
+        text=raw_text,
     )
 
 
@@ -745,12 +887,19 @@ def investigate_opportunity(
 
     fallback_report = _build_deterministic_report(
         opportunity_type=_infer_opportunity_type(raw_text, default_opportunity_type),
-        company_name=None,
+        company_name=extract_company_name(
+            raw_text,
+            emails=extracted_entities_dict.get("email"),
+            domains=extracted_entities_dict.get("domain"),
+        ),
         deterministic_red_flags=deterministic_red_flags,
         step_b_domain=step_b_domain,
         step_b_protection=step_b_protection,
         step_b_connections=step_b_connections,
         is_quota_fallback=is_quota_fallback,
+        text=raw_text,
+        emails=extracted_entities_dict.get("email"),
+        domains=extracted_entities_dict.get("domain"),
     )
 
     return {

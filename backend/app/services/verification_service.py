@@ -50,6 +50,14 @@ PAYMENT_KEYWORDS = [
 ]
 
 NEGATION_PHRASES = [
+    "zero ",
+    "₹0",
+    "rs 0",
+    "rs. 0",
+    "free of charge",
+    "not required",
+    "will not charge",
+    "won't charge",
     "never charge",
     "never charges",
     "does not charge",
@@ -59,8 +67,11 @@ NEGATION_PHRASES = [
     "no training",
     "no processing",
     "no fee",
+    "no fees",
     "without any fee",
+    "without fee",
     "zero fee",
+    "zero fees",
     "never ask",
 ]
 
@@ -68,7 +79,7 @@ NEGATION_PHRASES = [
 def _is_negated_payment_match(text: str, start_idx: int, end_idx: int) -> bool:
     """
     Checks if a payment keyword match is negated by disclaimer or negation phrases
-    within its enclosing sentence or 60 characters preceding the match.
+    within its enclosing sentence, full line, or 80 characters preceding the match.
     """
     # Sentence boundary detection
     last_term = -1
@@ -85,12 +96,18 @@ def _is_negated_payment_match(text: str, start_idx: int, end_idx: int) -> bool:
             next_term = pos
     sentence = text[sentence_start:next_term]
 
-    # Preceding context within sentence (or up to 60 characters before match)
-    window_start = max(sentence_start, start_idx - 60)
-    window_before = text[window_start:start_idx]
+    # Preceding context up to 80 characters before match
+    window_before = text[max(0, start_idx - 80):start_idx]
+
+    # Full line enclosing the match
+    line_start = text.rfind("\n", 0, start_idx)
+    line_start = 0 if line_start == -1 else line_start + 1
+    line_end = text.find("\n", end_idx)
+    line_end = len(text) if line_end == -1 else line_end
+    full_line = text[line_start:line_end]
 
     for phrase in NEGATION_PHRASES:
-        if phrase in sentence or phrase in window_before:
+        if phrase in sentence or phrase in window_before or phrase in full_line:
             return True
     return False
 

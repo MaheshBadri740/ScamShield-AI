@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ScamShield AI — Verify Every Opportunity. Protect Your Future.",
+  title: "ScamShield — Career Verification Portal",
   description:
-    "AI-Powered Career Opportunity Fraud Detection & Student Protection Platform with Multi-Agent Intelligence.",
+    "Student career opportunity verification dashboard for checking job offers, internships, and recruiter messages.",
   icons: {
     icon: "/logo.jpg",
   },
@@ -31,7 +31,9 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-slate-950 text-slate-100">{children}</body>
+      <body className="min-h-full flex flex-col bg-[#0B1120] text-slate-100 antialiased selection:bg-indigo-600 selection:text-white">
+        {children}
+      </body>
     </html>
   );
 }

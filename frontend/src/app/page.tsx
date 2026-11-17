@@ -11,7 +11,7 @@ import {
   OpportunityReportItem,
   InvestigationResponse,
 } from "@/types";
-import { AlertCircle, Shield, Sparkles, CheckCircle2 } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
 export default function Home() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
@@ -79,7 +79,7 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        let errorDetail = "Failed to complete investigation. Please try again.";
+        let errorDetail = "Failed to complete verification. Please try again.";
         try {
           const errorJson = await response.json();
           if (errorJson.detail) {
@@ -108,7 +108,7 @@ export default function Home() {
     } catch (err: any) {
       setInvestigationError(
         err.message ||
-          "Network error: Unable to contact ScamShield AI backend at " + API_BASE_URL
+          "Network error: Unable to contact ScamShield backend at " + API_BASE_URL
       );
     } finally {
       setIsInvestigating(false);
@@ -116,44 +116,24 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-white">
-      {/* Navigation Header & Stats Bar */}
+    <div className="min-h-screen bg-[#0B1120] text-slate-100 flex flex-col font-sans selection:bg-indigo-600 selection:text-white">
+      {/* Top Navigation Bar with Hamburger Drawer Trigger */}
       <Header stats={stats} loadingStats={loadingStats} />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-10">
-        {/* Hero Section */}
-        <div className="text-center max-w-3xl mx-auto space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-cyan-950/60 border border-cyan-800 text-cyan-300 text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Student Career Safety & Verification Platform</span>
-          </div>
-
-          <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-white leading-tight">
-            Verify Every Opportunity. <br />
-            <span className="bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-400 bg-clip-text text-transparent">
-              Protect Your Future.
-            </span>
-          </h2>
-
-          <p className="text-sm sm:text-base text-slate-400 leading-relaxed max-w-2xl mx-auto">
-            Safeguard your career from fake internships, upfront registration fee traps, and
-            identity harvesting syndicates with multimodal AI intelligence.
-          </p>
-        </div>
-
+      {/* Main Workspace (Full-Width Clean Dashboard Layout) */}
+      <main className="flex-1 w-full px-4 sm:px-6 lg:px-10 py-6 sm:py-8 space-y-8 sm:space-y-10">
         {/* Global Error Banner */}
         {investigationError && (
-          <div className="p-4 rounded-xl bg-red-950/70 border border-red-700 text-red-200 text-sm flex items-start gap-3">
+          <div className="p-4 rounded-xl bg-red-950/70 border border-red-800 text-red-200 text-xs sm:text-sm flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="font-bold">Investigation Failed</p>
+              <p className="font-semibold">Verification Request Failed</p>
               <p className="text-xs text-red-300 mt-0.5">{investigationError}</p>
             </div>
           </div>
         )}
 
-        {/* Investigator Input Form */}
+        {/* Top Section: InvestigatorForm */}
         <InvestigatorForm
           onInvestigate={handleInvestigate}
           isLoading={isInvestigating}
@@ -161,18 +141,17 @@ export default function Home() {
           onLanguageChange={setSelectedLanguage}
         />
 
-        {/* Dynamic Investigation Report Card */}
+        {/* Middle Section: ReportCard (dynamically displayed when a report exists) */}
         {investigationResult && (
-          <div ref={reportCardRef} className="pt-4 animate-fadeIn">
-            <div className="flex items-center gap-2 mb-4 text-emerald-400 text-sm font-bold">
-              <CheckCircle2 className="w-5 h-5" />
-              <span>Investigation Complete</span>
-            </div>
-            <ReportCard data={investigationResult} selectedLanguage={selectedLanguage} />
+          <div ref={reportCardRef} className="animate-fadeIn">
+            <ReportCard
+              data={investigationResult}
+              selectedLanguage={selectedLanguage}
+            />
           </div>
         )}
 
-        {/* Recent Community Alerts */}
+        {/* Bottom Section: Recent Community Alerts */}
         <RecentAlerts
           reports={reports}
           isLoading={loadingReports}
@@ -182,19 +161,17 @@ export default function Home() {
             fetchStats();
           }}
         />
-      </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950/90 py-8 mt-12 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 space-y-2">
-          <p className="font-semibold text-slate-400">
-            ScamShield AI — Student Protection & Career Opportunity Defense Platform
+        {/* Clean Dashboard Footer */}
+        <footer className="pt-6 border-t border-slate-800/60 text-center text-xs text-slate-500">
+          <p className="text-slate-400 font-medium">
+            ScamShield — Career Opportunity Safety & Verification Dashboard
           </p>
-          <p>
-            An open initiative protecting college students and early-career candidates from predatory recruitment fraud.
+          <p className="text-[11px] text-slate-500 mt-1">
+            An open platform protecting students and candidates against recruitment fraud.
           </p>
-        </div>
-      </footer>
+        </footer>
+      </main>
     </div>
   );
 }
