@@ -5,7 +5,8 @@ import { Header } from "@/components/Header";
 import { InvestigatorForm } from "@/components/InvestigatorForm";
 import { ReportCard } from "@/components/ReportCard";
 import { RecentAlerts } from "@/components/RecentAlerts";
-import { API_BASE_URL } from "@/lib/api";
+import { FollowUpModal } from "@/components/FollowUpModal";
+import { API_BASE_URL, fetchReportById } from "@/lib/api";
 import {
   StatsResponse,
   OpportunityReportItem,
@@ -26,6 +27,7 @@ export default function Home() {
   const [investigationError, setInvestigationError] = useState<string | null>(null);
 
   const [selectedLanguage, setSelectedLanguage] = useState<"en" | "te">("en");
+  const [isFollowUpOpen, setIsFollowUpOpen] = useState<boolean>(false);
 
   const reportCardRef = useRef<HTMLDivElement>(null);
 
@@ -115,10 +117,30 @@ export default function Home() {
     }
   };
 
+  // View Full Investigation Report for a clicked Community Alert
+  const handleSelectReport = async (reportId: number) => {
+    try {
+      setInvestigationError(null);
+      const data = await fetchReportById(reportId);
+      setInvestigationResult(data);
+      setTimeout(() => {
+        reportCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : `Failed to load report #${reportId}`;
+      setInvestigationError(msg);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-100 flex flex-col font-sans selection:bg-indigo-600 selection:text-white">
       {/* Top Navigation Bar with Hamburger Drawer Trigger */}
-      <Header stats={stats} loadingStats={loadingStats} />
+      <Header
+        stats={stats}
+        loadingStats={loadingStats}
+        hasActiveReport={!!investigationResult}
+        onOpenFollowUp={() => setIsFollowUpOpen(true)}
+      />
 
       {/* Main Workspace (Full-Width Clean Dashboard Layout) */}
       <main className="flex-1 w-full px-4 sm:px-6 lg:px-10 py-6 sm:py-8 space-y-8 sm:space-y-10">
@@ -160,6 +182,7 @@ export default function Home() {
             fetchReports();
             fetchStats();
           }}
+          onSelectReport={handleSelectReport}
         />
 
         {/* Clean Dashboard Footer */}
@@ -172,6 +195,15 @@ export default function Home() {
           </p>
         </footer>
       </main>
+
+      {/* Follow-Up Assistant Chat Modal / Drawer */}
+      <FollowUpModal
+        isOpen={isFollowUpOpen}
+        onClose={() => setIsFollowUpOpen(false)}
+        data={investigationResult}
+        selectedLanguage={selectedLanguage}
+        onLanguageChange={setSelectedLanguage}
+      />
     </div>
   );
 }

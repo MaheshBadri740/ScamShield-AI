@@ -15,9 +15,16 @@ import { StatsResponse } from "@/types";
 interface HeaderProps {
   stats: StatsResponse | null;
   loadingStats: boolean;
+  hasActiveReport?: boolean;
+  onOpenFollowUp?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ stats, loadingStats }) => {
+export const Header: React.FC<HeaderProps> = ({
+  stats,
+  loadingStats,
+  hasActiveReport = false,
+  onOpenFollowUp,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
 
   // Close drawer on Escape key press
@@ -219,6 +226,60 @@ export const Header: React.FC<HeaderProps> = ({ stats, loadingStats }) => {
                 </span>
               </div>
             </div>
+          </div>
+
+          <div className="h-px bg-slate-800/80" />
+
+          {/* Follow-Up Assistant Quick Launcher */}
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Investigation Tools
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                if (hasActiveReport && onOpenFollowUp) {
+                  setIsOpen(false);
+                  onOpenFollowUp();
+                }
+              }}
+              disabled={!hasActiveReport}
+              className={`w-full p-3 rounded-xl border flex items-center justify-between text-left transition-all ${
+                hasActiveReport
+                  ? "bg-indigo-950/40 hover:bg-indigo-900/50 border-indigo-700/60 text-slate-200 cursor-pointer shadow-sm hover:border-indigo-600"
+                  : "bg-slate-900/40 border-slate-800 text-slate-500 cursor-not-allowed opacity-60"
+              }`}
+              title={hasActiveReport ? "Open Follow-Up Assistant" : "Verify an offer first"}
+            >
+              <div className="flex items-center gap-2.5">
+                <img
+                  src="/assistant-icon.jpg"
+                  alt="Follow-Up Assistant"
+                  className="w-9 h-9 rounded-lg object-cover border border-indigo-500/30 shrink-0"
+                />
+                <div>
+                  <p
+                    className={`text-xs font-semibold ${
+                      hasActiveReport ? "text-white" : "text-slate-500"
+                    }`}
+                  >
+                    Follow-Up Assistant
+                  </p>
+                  <p className="text-[10px] text-slate-400">
+                    {hasActiveReport ? "Analyze recruiter replies" : "Verify an offer first"}
+                  </p>
+                </div>
+              </div>
+              {hasActiveReport ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                  Ready
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-600">
+                  Locked
+                </span>
+              )}
+            </button>
           </div>
 
           <div className="h-px bg-slate-800/80" />

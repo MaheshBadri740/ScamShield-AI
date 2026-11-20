@@ -14,7 +14,10 @@ import {
   Building,
   Briefcase,
 } from "lucide-react";
-import { InvestigationResponse, RiskLevel } from "@/types";
+import {
+  InvestigationResponse,
+  RiskLevel,
+} from "@/types";
 
 interface ReportCardProps {
   data: InvestigationResponse;

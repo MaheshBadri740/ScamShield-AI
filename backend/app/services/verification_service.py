@@ -56,12 +56,23 @@ NEGATION_PHRASES = [
     "rs. 0",
     "free of charge",
     "not required",
+    "no need",
     "will not charge",
     "won't charge",
     "never charge",
     "never charges",
     "does not charge",
     "do not charge",
+    "do not ask",
+    "don't ask",
+    "never ask",
+    "never asks",
+    "does not ask",
+    "never request",
+    "never requests",
+    "do not request",
+    "don't request",
+    "does not request",
     "no registration",
     "no security",
     "no training",
@@ -72,13 +83,12 @@ NEGATION_PHRASES = [
     "without fee",
     "zero fee",
     "zero fees",
-    "never ask",
 ]
 
 
-def _is_negated_payment_match(text: str, start_idx: int, end_idx: int) -> bool:
+def _is_negated_match(text: str, start_idx: int, end_idx: int) -> bool:
     """
-    Checks if a payment keyword match is negated by disclaimer or negation phrases
+    Checks if a payment or PII keyword match is negated by disclaimer or negation phrases
     within its enclosing sentence, full line, or 80 characters preceding the match.
     """
     # Sentence boundary detection
@@ -110,6 +120,10 @@ def _is_negated_payment_match(text: str, start_idx: int, end_idx: int) -> bool:
         if phrase in sentence or phrase in window_before or phrase in full_line:
             return True
     return False
+
+
+# Backward compatibility alias
+_is_negated_payment_match = _is_negated_match
 
 # Regex patterns for Indian identity numbers
 AADHAAR_REGEX = re.compile(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b")
@@ -212,7 +226,20 @@ def check_student_protection_risks(text: str) -> Dict[str, Any]:
     payment_alerts: List[str] = []
 
     for keyword, description in PII_KEYWORDS:
-        if keyword in lowered_text:
+        # Check all occurrences of PII keyword; only flag if at least one occurrence is not negated
+        start = 0
+        has_unnegated = False
+        while True:
+            idx = lowered_text.find(keyword, start)
+            if idx == -1:
+                break
+            end = idx + len(keyword)
+            if not _is_negated_match(lowered_text, idx, end):
+                has_unnegated = True
+                break
+            start = end
+
+        if has_unnegated:
             pii_alerts.append(f"{description} ('{keyword}' mentioned)")
 
     for keyword, description in PAYMENT_KEYWORDS:
@@ -224,7 +251,7 @@ def check_student_protection_risks(text: str) -> Dict[str, Any]:
             if idx == -1:
                 break
             end = idx + len(keyword)
-            if not _is_negated_payment_match(lowered_text, idx, end):
+            if not _is_negated_match(lowered_text, idx, end):
                 has_unnegated = True
                 break
             start = end

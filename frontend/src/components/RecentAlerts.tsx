@@ -19,6 +19,7 @@ interface RecentAlertsProps {
   isLoading: boolean;
   onRefresh: () => void;
   onReportsChanged?: () => void;
+  onSelectReport?: (reportId: number) => void;
 }
 
 export const RecentAlerts: React.FC<RecentAlertsProps> = ({
@@ -26,6 +27,7 @@ export const RecentAlerts: React.FC<RecentAlertsProps> = ({
   isLoading,
   onRefresh,
   onReportsChanged,
+  onSelectReport,
 }) => {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [isClearing, setIsClearing] = useState<boolean>(false);
@@ -148,7 +150,8 @@ export const RecentAlerts: React.FC<RecentAlertsProps> = ({
             return (
               <div
                 key={report.id}
-                className="bg-slate-950 border border-slate-800 hover:border-slate-700 p-4 rounded-xl transition-colors space-y-2.5 relative group"
+                onClick={() => onSelectReport?.(report.id)}
+                className="bg-slate-950 border border-slate-800 hover:border-indigo-500/50 p-4 rounded-xl transition-all space-y-2.5 relative group cursor-pointer hover:shadow-md hover:shadow-indigo-950/20"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-1">
@@ -174,7 +177,10 @@ export const RecentAlerts: React.FC<RecentAlertsProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => handleDelete(report.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(report.id);
+                      }}
                       disabled={isDeletingThis}
                       className="p-1 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition-colors opacity-80 group-hover:opacity-100 disabled:opacity-40"
                       title={`Delete report #${report.id}`}
@@ -200,6 +206,12 @@ export const RecentAlerts: React.FC<RecentAlertsProps> = ({
                   <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">
                     {topRedFlag}
                   </p>
+                </div>
+
+                {/* Subtle Click to View Full Report hint */}
+                <div className="flex items-center justify-between text-[11px] text-indigo-400/80 pt-1 border-t border-slate-900 group-hover:text-indigo-300 transition-colors">
+                  <span>Click to view full report & follow up</span>
+                  <span className="font-bold">→</span>
                 </div>
               </div>
             );

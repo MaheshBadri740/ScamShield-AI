@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, Form, File, UploadFile, Request, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -7,6 +8,7 @@ from app.core.limiter import limiter
 from app.models.scam_models import OpportunityReport, ScamEntity, ReportEntityLink
 from app.services.scam_connection_service import record_scam_entities
 from app.agents.investigation_agent import investigate_opportunity
+from app.agents.follow_up_agent import analyze_follow_up
 
 router = APIRouter(prefix="/api", tags=["Investigation & Reports"])
 
@@ -104,6 +106,53 @@ async def investigate_career_opportunity(
     }
 
 
+class FollowUpRequest(BaseModel):
+    report_id: int
+    message: str
+    language: str = "en"
+    verification_questions: Optional[List[str]] = None
+    chat_history: Optional[List[Dict[str, Any]]] = None
+
+
+@router.post("/investigate/followup")
+@limiter.limit("15/minute")
+async def follow_up_investigation(
+    request: Request,
+    payload: FollowUpRequest,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Evaluates follow-up inquiries or pasted recruiter responses for an investigated report.
+    Returns structured forensic analysis, updated risk verdict, and suggested response.
+    """
+    report = (
+        db.query(OpportunityReport)
+        .filter(OpportunityReport.id == payload.report_id)
+        .first()
+    )
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Report with id {payload.report_id} not found",
+        )
+
+    if not payload.message or not payload.message.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Message cannot be empty",
+        )
+
+    result = analyze_follow_up(
+        report=report,
+        user_message=payload.message.strip(),
+        language=payload.language or "en",
+        verification_questions=payload.verification_questions or [],
+        chat_history=payload.chat_history or [],
+    )
+
+    return result
+
+
 @router.get("/reports")
 def get_recent_reports(
     db: Session = Depends(get_db),
@@ -130,6 +179,124 @@ def get_recent_reports(
         }
         for r in reports
     ]
+
+
+@router.get("/reports/{report_id}")
+def get_single_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Retrieves full investigation report details by ID matching InvestigationResponse.
+    Reconstructs scam_connections, student_protection, and domain_analysis from stored data and linked entities.
+    """
+    report = (
+        db.query(OpportunityReport)
+        .filter(OpportunityReport.id == report_id)
+        .first()
+    )
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Report with id {report_id} not found",
+        )
+
+    # Fetch linked scam entities via ReportEntityLink
+    links = (
+        db.query(ReportEntityLink)
+        .filter(ReportEntityLink.report_id == report_id)
+        .all()
+    )
+    matched_entities = []
+    extracted_entities: Dict[str, List[str]] = {
+        "phone": [],
+        "email": [],
+        "domain": [],
+        "upi_id": [],
+        "telegram": [],
+    }
+    total_connected = 0
+    for link in links:
+        entity = link.entity
+        if entity:
+            matched_entities.append({
+                "entity_type": entity.entity_type,
+                "entity_value": entity.entity_value,
+                "previous_reports": entity.report_count,
+            })
+            if entity.entity_type in extracted_entities:
+                extracted_entities[entity.entity_type].append(entity.entity_value)
+            if entity.report_count > total_connected:
+                total_connected = entity.report_count
+
+    is_coordinated = total_connected >= 2
+    scam_connections = {
+        "matched_entities": matched_entities,
+        "total_connected_reports": total_connected,
+        "is_coordinated_campaign": is_coordinated,
+    }
+
+    red_flags = report.red_flags or []
+    student_protection_alerts = [
+        f for f in red_flags
+        if any(k in f.lower() for k in ("fee", "deposit", "payment", "upi", "aadhaar", "pan", "otp", "bank", "pii", "money", "rupees", "rs", "₹"))
+    ]
+    has_critical_risk = report.risk_level == "HIGH" and bool(student_protection_alerts)
+
+    student_protection = {
+        "pii_alerts": [a for a in student_protection_alerts if any(k in a.lower() for k in ("aadhaar", "pan", "otp", "bank", "pii"))],
+        "payment_alerts": [a for a in student_protection_alerts if any(k in a.lower() for k in ("fee", "deposit", "payment", "upi", "money", "rupees", "rs", "₹"))],
+        "has_critical_risk": has_critical_risk,
+        "all_alerts": student_protection_alerts,
+    }
+
+    domain_flags = [
+        f for f in red_flags
+        if any(k in f.lower() for k in ("domain", "email provider", "tld", "hyphen", "@gmail", "@yahoo", "@outlook"))
+    ]
+    domain_analysis = {
+        "free_provider_warnings": [f for f in domain_flags if "free" in f.lower() or "provider" in f.lower()],
+        "suspicious_tld_warnings": [f for f in domain_flags if "tld" in f.lower()],
+        "hyphenated_domain_warnings": [f for f in domain_flags if "hyphen" in f.lower()],
+        "flags": domain_flags,
+        "has_suspicious_domain": bool(domain_flags),
+    }
+
+    report_data = {
+        "opportunity_type": report.opportunity_type,
+        "company_name": report.company_name,
+        "risk_level": report.risk_level,
+        "risk_score": report.risk_score,
+        "red_flags": red_flags,
+        "student_protection_alerts": student_protection_alerts,
+        "summary_en": report.summary_en,
+        "summary_te": report.summary_te,
+        "preventive_actions_en": [
+            "Never transfer money for registration, onboarding, training, or equipment.",
+            "Do not disclose Aadhaar, PAN card, or bank account details prior to formal in-person or verified portal hiring.",
+            "Independently cross-verify the recruiter's identity on official corporate directories or LinkedIn.",
+        ],
+        "preventive_actions_te": [
+            "Registration fee, training fee, leda laptop deposit peru tho e mathram dabbu transfer cheyavaddu.",
+            "Official offer letter mariyu verified hiring portal lekunda Aadhaar, PAN card, leda bank details share cheyavaddu.",
+            "Company official website mariyu recruiter LinkedIn profile ni independent ga cross-check cheyandi.",
+        ],
+        "verification_questions": [
+            "Can you provide a formal offer letter from your official company corporate email domain?",
+            "Is this position registered on your company's official public careers portal with a verifiable requisition ID?",
+            "Can you confirm in writing that no candidate will ever be asked to pay training, equipment, or document fees?",
+        ],
+    }
+
+    return {
+        "report_id": report.id,
+        "created_at": report.created_at.isoformat() if report.created_at else None,
+        "report": report_data,
+        "scam_connections": scam_connections,
+        "domain_analysis": domain_analysis,
+        "student_protection": student_protection,
+        "extracted_entities": extracted_entities,
+    }
 
 
 @router.delete("/reports")

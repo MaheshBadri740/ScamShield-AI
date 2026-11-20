@@ -85,3 +85,35 @@ export interface StatsResponse {
   high_risk_count: number;
   coordinated_campaigns_count: number;
 }
+
+export type FollowUpVerdict = "STILL_HIGH_RISK" | "SUSPICIOUS" | "LOOKS_LEGIT";
+export type FollowUpIntent = "CASUAL_CHAT" | "STUDENT_QUESTION" | "RECRUITER_REPLY";
+
+export interface FollowUpRequestPayload {
+  report_id: number;
+  message: string;
+  language: "en" | "te";
+  verification_questions?: string[];
+  chat_history: { role: string; content: string }[];
+}
+
+export interface FollowUpResponseData {
+  message_intent?: FollowUpIntent;
+  matched_question?: string | null;
+  verdict?: FollowUpVerdict | null;
+  analysis: string;
+  suggested_reply?: string | null;
+  has_critical_risk?: boolean;
+}
+
+export interface FollowUpChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  message_intent?: FollowUpIntent;
+  matched_question?: string | null;
+  verdict?: FollowUpVerdict | null;
+  suggested_reply?: string | null;
+  has_critical_risk?: boolean;
+  timestamp: string;
+}
