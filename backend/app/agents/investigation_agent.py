@@ -1,5 +1,6 @@
 import io
 import re
+import time
 from typing import Optional, List, Dict, Any, Tuple
 from PIL import Image
 from pydantic import BaseModel, Field
@@ -174,6 +175,47 @@ def _build_generation_config(response_schema: Any, model_name: str = "gemini-3.8
         return None
 
 
+# Module-level cache for models that encounter 429 RESOURCE_EXHAUSTED
+# Key: model_name, Value: expiry timestamp (time.time() + cooldown)
+_EXHAUSTED_MODELS_COOLDOWN: Dict[str, float] = {}
+COOLDOWN_SECONDS: float = 15 * 60  # 15 minutes
+
+
+def _is_model_in_cooldown(model_name: str) -> bool:
+    """Checks whether a model is currently in a 15-minute 429 quota cooldown."""
+    expiry = _EXHAUSTED_MODELS_COOLDOWN.get(model_name)
+    if expiry is None:
+        return False
+    if time.time() < expiry:
+        return True
+    # Cooldown has passed; evict from cache
+    _EXHAUSTED_MODELS_COOLDOWN.pop(model_name, None)
+    return False
+
+
+def _mark_model_exhausted(model_name: str, cooldown_seconds: float = COOLDOWN_SECONDS) -> None:
+    """Marks a model as quota-exhausted with a cooldown timestamp."""
+    _EXHAUSTED_MODELS_COOLDOWN[model_name] = time.time() + cooldown_seconds
+    print(
+        f"[ScamShield AI Quota Cache]: Model '{model_name}' marked as quota-exhausted (429). "
+        f"Cooldown active for {cooldown_seconds / 60:.0f} minutes."
+    )
+
+
+def _is_transient_error(err_str: str) -> bool:
+    """Checks for 503 UNAVAILABLE or 504 DEADLINE_EXCEEDED / timeout errors."""
+    err_lower = err_str.lower()
+    return (
+        "503" in err_str
+        or "unavailable" in err_lower
+        or "504" in err_str
+        or "deadline_exceeded" in err_lower
+        or "deadline exceeded" in err_lower
+        or "timed out" in err_lower
+        or "timeout" in err_lower
+    )
+
+
 def _generate_content_with_failover(
     client: Any,
     contents: List[Any],
@@ -182,9 +224,10 @@ def _generate_content_with_failover(
 ) -> Any:
     """
     Calls Gemini API trying gemini-3.8-flash first.
-    If it encounters a 429 (RESOURCE_EXHAUSTED / quota exceeded), 503 (Service Unavailable),
-    or 404 (Not Found) error, logs the error and immediately retries with gemini-3.5-flash-lite
-    before failing back.
+    If it encounters 503 UNAVAILABLE or 504 DEADLINE_EXCEEDED, waits 1 second and retries once
+    before failing over to gemini-3.5-flash-lite.
+    If 429 RESOURCE_EXHAUSTED occurs, caches the exhausted model for 15 minutes so subsequent
+    calls jump straight to gemini-3.5-flash-lite in 0ms without wasting time.
     Only passes thinking_config(thinking_budget=0) for gemini-3.8-flash; omits it for gemini-3.5-flash-lite
     (and any -lite model) to prevent 400 INVALID_ARGUMENT.
     Logs all failures as: [ScamShield AI Gemini Error]: {e}
@@ -199,67 +242,87 @@ def _generate_content_with_failover(
         target_schema = getattr(config, "response_schema", None)
 
     for idx, model_name in enumerate(models):
-        try:
-            if target_schema is not None:
-                current_config = _build_generation_config(target_schema, model_name=model_name)
-            else:
-                current_config = config
-
-            return client.models.generate_content(
-                model=model_name,
-                contents=contents,
-                config=current_config,
+        # 1. Skip models currently in 15-minute 429 cooldown
+        if _is_model_in_cooldown(model_name):
+            remaining_sec = int(_EXHAUSTED_MODELS_COOLDOWN.get(model_name, 0) - time.time())
+            print(
+                f"[ScamShield AI Quota Cache]: Skipping '{model_name}' "
+                f"(in 429 cooldown, ~{max(1, remaining_sec // 60)}m remaining). Jumping to next candidate in 0ms."
             )
-        except Exception as e:
-            last_error = e
-            err_msg = str(e)
-            print(f"[ScamShield AI Gemini Error] [{model_name}]: {e}")
+            continue
 
-            # Check for 429 quota, 503 overload, 504 deadline, 500 server error, or 404 model not found
-            err_lower = err_msg.lower()
-            is_quota_issue = (
-                "429" in err_msg
-                or "resource_exhausted" in err_lower
-                or "quota" in err_lower
-                or "rate limit" in err_lower
-            )
-            if not is_quota_issue:
-                all_quota_failures = False
+        if target_schema is not None:
+            current_config = _build_generation_config(target_schema, model_name=model_name)
+        else:
+            current_config = config
 
-            is_failover_status = (
-                is_quota_issue
-                or "504" in err_msg
-                or "deadline_exceeded" in err_lower
-                or "deadline exceeded" in err_lower
-                or "timed out" in err_lower
-                or "timeout" in err_lower
-                or "500" in err_msg
-                or "internal" in err_lower
-                or "503" in err_msg
-                or "unavailable" in err_lower
-                or "404" in err_msg
-                or "not found" in err_lower
-            )
-
-            if is_failover_status and idx < len(models) - 1:
-                next_model = models[idx + 1]
-                print(
-                    f"[ScamShield AI Gemini Failover]: {model_name} returned error ({e}). "
-                    f"Retrying with {next_model}..."
+        # 2. Call with a 1-second retry once per model on 503 UNAVAILABLE or 504 DEADLINE_EXCEEDED
+        retried_transient = False
+        while True:
+            try:
+                return client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    config=current_config,
                 )
-                continue
-            else:
+            except Exception as e:
+                last_error = e
+                err_msg = str(e)
+                err_lower = err_msg.lower()
+
+                # If transient error (503/504), retry once after 1s before failing over
+                if not retried_transient and _is_transient_error(err_msg):
+                    retried_transient = True
+                    print(
+                        f"[ScamShield AI Gemini Transient]: {model_name} encountered transient error "
+                        f"({e}). Retrying in 1s once before failover..."
+                    )
+                    time.sleep(1)
+                    continue
+
+                print(f"[ScamShield AI Gemini Error] [{model_name}]: {e}")
+
+                is_quota_issue = (
+                    "429" in err_msg
+                    or "resource_exhausted" in err_lower
+                    or "quota" in err_lower
+                    or "rate limit" in err_lower
+                )
+
+                if is_quota_issue:
+                    _mark_model_exhausted(model_name)
+                else:
+                    all_quota_failures = False
+
+                is_failover_status = (
+                    is_quota_issue
+                    or _is_transient_error(err_msg)
+                    or "500" in err_msg
+                    or "internal" in err_lower
+                    or "404" in err_msg
+                    or "not found" in err_lower
+                )
+
+                if is_failover_status and idx < len(models) - 1:
+                    next_model = models[idx + 1]
+                    print(
+                        f"[ScamShield AI Gemini Failover]: {model_name} returned error ({e}). "
+                        f"Failing over to {next_model}..."
+                    )
                 break
 
-    if all_quota_failures and last_error is not None:
+    if all_quota_failures:
         print(
             "[ScamShield AI Quota Notice]: All Gemini models exhausted quota (429 RESOURCE_EXHAUSTED). "
             "Engaging ScamShield Deterministic Student Protection Engine."
         )
-        raise GeminiQuotaExhaustedError(str(last_error))
+        msg = str(last_error) if last_error else "All candidate Gemini models are in 429 cooldown."
+        raise GeminiQuotaExhaustedError(msg)
 
     if last_error is not None:
         raise last_error
+
+    raise RuntimeError("Failed to generate content: no candidate Gemini models available.")
 
 
 def _optimize_image_if_needed(file_bytes: bytes, mime_type: str) -> Tuple[bytes, str]:

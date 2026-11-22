@@ -95,6 +95,7 @@ export interface FollowUpRequestPayload {
   language: "en" | "te";
   verification_questions?: string[];
   chat_history: { role: string; content: string }[];
+  file?: File | null;
 }
 
 export interface FollowUpResponseData {
@@ -110,6 +111,7 @@ export interface FollowUpChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  attachment_name?: string | null;
   message_intent?: FollowUpIntent;
   matched_question?: string | null;
   verdict?: FollowUpVerdict | null;

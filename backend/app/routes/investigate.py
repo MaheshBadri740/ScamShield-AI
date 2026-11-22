@@ -106,48 +106,85 @@ async def investigate_career_opportunity(
     }
 
 
-class FollowUpRequest(BaseModel):
-    report_id: int
-    message: str
-    language: str = "en"
-    verification_questions: Optional[List[str]] = None
-    chat_history: Optional[List[Dict[str, Any]]] = None
-
-
 @router.post("/investigate/followup")
 @limiter.limit("15/minute")
 async def follow_up_investigation(
     request: Request,
-    payload: FollowUpRequest,
+    report_id: int = Form(...),
+    message: str = Form(""),
+    language: str = Form("en"),
+    chat_history: str = Form("[]"),
+    verification_questions: str = Form("[]"),
+    file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
-    Evaluates follow-up inquiries or pasted recruiter responses for an investigated report.
+    Evaluates follow-up inquiries, questions, or pasted recruiter responses/documents for an investigated report.
+    Supports optional image/PDF file upload via multipart/form-data.
     Returns structured forensic analysis, updated risk verdict, and suggested response.
     """
+    clean_message = (message or "").strip()
+    if not clean_message and not file:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide a message or attach a document/image to evaluate.",
+        )
+
     report = (
         db.query(OpportunityReport)
-        .filter(OpportunityReport.id == payload.report_id)
+        .filter(OpportunityReport.id == report_id)
         .first()
     )
     if not report:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Report with id {payload.report_id} not found",
+            detail=f"Report with id {report_id} not found",
         )
 
-    if not payload.message or not payload.message.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Message cannot be empty",
-        )
+    file_bytes: Optional[bytes] = None
+    mime_type: Optional[str] = None
+
+    if file:
+        if file.content_type not in ALLOWED_MIME_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file format '{file.content_type}'. Allowed types: PNG, JPEG, WEBP, PDF.",
+            )
+
+        file_bytes = await file.read()
+        if len(file_bytes) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Uploaded file size ({len(file_bytes)} bytes) exceeds the maximum allowed 5MB limit.",
+            )
+        mime_type = file.content_type
+
+    parsed_history: List[Dict[str, Any]] = []
+    if chat_history:
+        try:
+            parsed_history = json.loads(chat_history)
+            if not isinstance(parsed_history, list):
+                parsed_history = []
+        except Exception:
+            parsed_history = []
+
+    parsed_questions: List[str] = []
+    if verification_questions:
+        try:
+            parsed_questions = json.loads(verification_questions)
+            if not isinstance(parsed_questions, list):
+                parsed_questions = []
+        except Exception:
+            parsed_questions = []
 
     result = analyze_follow_up(
         report=report,
-        user_message=payload.message.strip(),
-        language=payload.language or "en",
-        verification_questions=payload.verification_questions or [],
-        chat_history=payload.chat_history or [],
+        user_message=clean_message,
+        language=language or "en",
+        verification_questions=parsed_questions,
+        chat_history=parsed_history,
+        file_bytes=file_bytes,
+        mime_type=mime_type,
     )
 
     return result

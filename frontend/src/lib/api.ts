@@ -22,12 +22,22 @@ export async function fetchReportById(
 export async function sendFollowUp(
   payload: FollowUpRequestPayload
 ): Promise<FollowUpResponseData> {
+  const formData = new FormData();
+  formData.append("report_id", payload.report_id.toString());
+  formData.append("message", payload.message || "");
+  formData.append("language", payload.language || "en");
+  formData.append("chat_history", JSON.stringify(payload.chat_history || []));
+  formData.append(
+    "verification_questions",
+    JSON.stringify(payload.verification_questions || [])
+  );
+  if (payload.file) {
+    formData.append("file", payload.file);
+  }
+
   const res = await fetch(`${API_BASE_URL}/api/investigate/followup`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
+    body: formData,
   });
 
   if (!res.ok) {

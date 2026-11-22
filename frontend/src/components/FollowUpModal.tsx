@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   MessageSquare,
   MessageSquareText,
@@ -16,7 +16,7 @@ import {
   Check,
   Building,
   Briefcase,
-  Languages,
+  Paperclip,
 } from "lucide-react";
 import {
   InvestigationResponse,
@@ -42,14 +42,18 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
 }) => {
   const [messages, setMessages] = useState<FollowUpChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedReplyId, setCopiedReplyId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reset messages when report changes
   useEffect(() => {
     setMessages([]);
     setInputMessage("");
+    setAttachedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setError(null);
   }, [data?.report_id]);
 
@@ -104,21 +108,51 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
     setTimeout(() => setCopiedReplyId(null), 2000);
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError("File size exceeds 5MB limit. Please attach a smaller file.");
+      return;
+    }
+
+    const validTypes = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
+    if (!validTypes.includes(file.type)) {
+      setError("Unsupported file format. Please attach PNG, JPEG, WEBP, or PDF.");
+      return;
+    }
+
+    setAttachedFile(file);
+  };
+
+  const handleRemoveFile = () => {
+    setAttachedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const handleSendFollowUp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = inputMessage.trim();
-    if (!trimmed || isSending) return;
+    if ((!trimmed && !attachedFile) || isSending) return;
+
+    const fileToSend = attachedFile;
+    const attachmentName = fileToSend ? fileToSend.name : null;
 
     const userMsg: FollowUpChatMessage = {
       id: `user-${Date.now()}`,
       role: "user",
-      content: trimmed,
+      content: trimmed || (attachmentName ? `[Attached: ${attachmentName}]` : ""),
+      attachment_name: attachmentName,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
 
     const newHistory = [...messages, userMsg];
     setMessages(newHistory);
     setInputMessage("");
+    setAttachedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setIsSending(true);
     setError(null);
 
@@ -134,6 +168,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
         language: selectedLanguage,
         verification_questions: report.verification_questions || [],
         chat_history: historyPayload,
+        file: fileToSend,
       });
 
       const assistantMsg: FollowUpChatMessage = {
@@ -187,39 +222,6 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
                   Follow-Up Assistant
                 </span>
                 <span className="text-[11px] text-slate-500">Report #{data.report_id}</span>
-                {onLanguageChange ? (
-                  <div className="inline-flex items-center bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 text-[11px] shrink-0">
-                    <Languages className="w-3 h-3 text-slate-400 ml-1.5 mr-1" />
-                    <button
-                      type="button"
-                      onClick={() => onLanguageChange("en")}
-                      className={`px-2 py-0.5 rounded-md font-medium transition-all ${
-                        selectedLanguage === "en"
-                          ? "bg-slate-800 text-white font-semibold shadow-xs"
-                          : "text-slate-400 hover:text-white"
-                      }`}
-                      title="Switch to English"
-                    >
-                      English
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onLanguageChange("te")}
-                      className={`px-2 py-0.5 rounded-md font-medium transition-all ${
-                        selectedLanguage === "te"
-                          ? "bg-slate-800 text-white font-semibold shadow-xs"
-                          : "text-slate-400 hover:text-white"
-                      }`}
-                      title="Switch to Tenglish"
-                    >
-                      Tenglish
-                    </button>
-                  </div>
-                ) : (
-                  <span className="text-[11px] px-2 py-0.5 rounded bg-slate-800/80 text-slate-300 border border-slate-700/60">
-                    {selectedLanguage === "te" ? "Tenglish Mode" : "English Mode"}
-                  </span>
-                )}
               </div>
 
               <h3 id="modal-title" className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
@@ -310,7 +312,13 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
                           <span>You</span>
                           <span>{msg.timestamp}</span>
                         </div>
-                        <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                        {msg.attachment_name && (
+                          <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-indigo-950/80 border border-indigo-700/60 text-[11px] text-indigo-200 font-medium w-fit mb-1.5">
+                            <Paperclip className="w-3 h-3 text-indigo-400 shrink-0" />
+                            <span className="truncate max-w-[220px]">{msg.attachment_name}</span>
+                          </div>
+                        )}
+                        {msg.content && <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>}
                       </div>
                     </div>
                   );
@@ -424,7 +432,46 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
 
         {/* Modal Footer / Input Form */}
         <div className="p-4 border-t border-slate-800/90 bg-slate-900/60 shrink-0">
+          {/* File Attachment Chip */}
+          {attachedFile && (
+            <div className="mb-2.5 flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-indigo-950/70 border border-indigo-800/80 text-xs text-indigo-200">
+              <div className="flex items-center gap-2 truncate">
+                <Paperclip className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span className="truncate font-medium">{attachedFile.name}</span>
+                <span className="text-[10px] text-indigo-400/80 shrink-0">
+                  ({(attachedFile.size / 1024).toFixed(0)} KB)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleRemoveFile}
+                className="p-1 hover:bg-indigo-900/60 rounded text-slate-400 hover:text-slate-200 transition-colors"
+                title="Remove attached file"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           <form onSubmit={handleSendFollowUp} className="flex gap-2 items-end">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf"
+              className="hidden"
+            />
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isSending}
+              title="Attach screenshot or PDF (max 5MB)"
+              className="h-[46px] px-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-indigo-400 rounded-xl flex items-center justify-center transition-colors shrink-0 disabled:opacity-50"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+
             <textarea
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
@@ -436,8 +483,8 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
               }}
               placeholder={
                 selectedLanguage === "te"
-                  ? "Recruiter reply paste cheyandi, leda emaina doubt adagandi..."
-                  : "Ask a question (e.g. 'Should I share my resume?') or paste a recruiter's reply..."
+                  ? "Recruiter reply paste cheyandi, screenshot attach cheyandi..."
+                  : "Ask a question, paste a recruiter reply, or attach a screenshot/PDF..."
               }
               rows={2}
               className="flex-1 bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-xl p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none resize-none transition-colors"
@@ -445,7 +492,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
 
             <button
               type="submit"
-              disabled={isSending || !inputMessage.trim()}
+              disabled={isSending || (!inputMessage.trim() && !attachedFile)}
               className="h-[46px] px-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors shrink-0"
             >
               {isSending ? (
